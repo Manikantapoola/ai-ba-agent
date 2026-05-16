@@ -2,8 +2,7 @@
 
 > Upload any sales CSV or Excel file and get instant AI-powered business insights, KPI analysis, and action recommendations — automatically.
 
-🔗 **Live Demo:** [Click here to try it]https://ai-ba-agent-lfrsqffyjraxnejwocjq3l.streamlit.app/)
-
+🔗 **Live Demo:** [Click here to try it][https://ai-ba-agent-lfrsqffyjraxnejwocjq3l.streamlit.app]
 ---
 
 ## What It Does
