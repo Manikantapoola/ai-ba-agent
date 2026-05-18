@@ -1,6 +1,6 @@
 import streamlit as st
-import plotly.express as px
 import plotly.graph_objects as go
+import pandas as pd
 import io, json
 
 from src.data_loader  import load_file
@@ -28,7 +28,6 @@ html, body,
     font-family: 'DM Sans', sans-serif !important;
     color: #111111 !important;
 }
-
 [data-testid="stHeader"]     { background: transparent !important; }
 [data-testid="stDecoration"] { display: none !important; }
 #MainMenu, footer, .stDeployButton { visibility: hidden; }
@@ -106,6 +105,35 @@ html, body,
     border-bottom: 1px solid #E8E8E2;
 }
 
+.dq-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: #DDDDDD;
+    border: 1px solid #DDDDDD;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 2.5rem;
+}
+.dq-cell {
+    background: #FAFAF7;
+    padding: 1rem 1.2rem;
+}
+.dq-value {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.4rem;
+    color: #111111;
+    line-height: 1;
+}
+.dq-label {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: #AAAAAA;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
 .metric-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -135,6 +163,14 @@ html, body,
     line-height: 1;
     letter-spacing: -0.02em;
 }
+.metric-delta {
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-top: 0.4rem;
+}
+.delta-up   { color: #1A7A1A; }
+.delta-down { color: #AA1A1A; }
+.delta-flat { color: #888888; }
 
 .summary-block {
     background: #111111;
@@ -185,7 +221,7 @@ html, body,
     border: 1px solid #E8E8E2;
     border-radius: 3px;
     padding: 1rem 0.8rem 0.3rem;
-    margin-bottom: 1px;
+    margin-bottom: 16px;
 }
 
 [data-testid="stDownloadButton"] button {
@@ -197,7 +233,6 @@ html, body,
     font-weight: 500 !important;
     border-radius: 3px !important;
     padding: 0.65rem 1.4rem !important;
-    letter-spacing: 0.04em !important;
     width: 100% !important;
     transition: background 0.2s !important;
 }
@@ -290,7 +325,6 @@ html, body,
 .page-footer-left {
     font-size: 0.75rem;
     color: #BBBBBB;
-    font-weight: 400;
 }
 .page-footer-right {
     font-size: 0.72rem;
@@ -301,6 +335,7 @@ html, body,
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -344,6 +379,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+
 # ── TOP BAR ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="topbar">
@@ -351,6 +387,7 @@ st.markdown("""
     <div class="topbar-meta">Manikanta's Project Work</div>
 </div>
 """, unsafe_allow_html=True)
+
 
 # ── PAGE TITLE ────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -361,6 +398,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # ── FILE UPLOADER ─────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader(
     "Upload file — CSV or Excel",
@@ -368,20 +406,19 @@ uploaded_file = st.file_uploader(
     label_visibility="visible"
 )
 
+
 # ── CHART LAYOUT HELPER ───────────────────────────────────────────────────────
 def clean_layout(title=""):
     return dict(
         title=dict(
             text=title,
-            font=dict(family="DM Serif Display, serif",
-                      size=13, color="#111111"),
+            font=dict(family="DM Serif Display, serif", size=13, color="#111111"),
             x=0, xanchor="left",
             pad=dict(l=4, b=10)
         ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="DM Sans, sans-serif",
-                  color="#AAAAAA", size=11),
+        font=dict(family="DM Sans, sans-serif", color="#AAAAAA", size=11),
         margin=dict(l=10, r=10, t=46, b=10),
         legend=dict(
             bgcolor="rgba(0,0,0,0)",
@@ -390,8 +427,38 @@ def clean_layout(title=""):
         )
     )
 
+
 # ── RESULTS ───────────────────────────────────────────────────────────────────
-def show_results(df, kpis, insights, show_raw, show_kpis):
+def show_results(df, kpis, insights, clean_report, show_raw, show_kpis):
+
+    # DATA QUALITY
+    st.markdown('<div class="section-label">Data Quality Report</div>',
+                unsafe_allow_html=True)
+    rows_loaded  = clean_report.get("final_rows", kpis.get("total_rows", 0))
+    dups_removed = clean_report.get("duplicates_removed", 0)
+    nulls_fixed  = sum(clean_report.get("nulls_found", {}).values())
+    rows_removed = clean_report.get("rows_removed_total", 0)
+
+    st.markdown(f"""
+    <div class="dq-row">
+        <div class="dq-cell">
+            <div class="dq-value">{rows_loaded:,}</div>
+            <div class="dq-label">Rows Loaded</div>
+        </div>
+        <div class="dq-cell">
+            <div class="dq-value">{dups_removed}</div>
+            <div class="dq-label">Duplicates Removed</div>
+        </div>
+        <div class="dq-cell">
+            <div class="dq-value">{nulls_fixed}</div>
+            <div class="dq-label">Nulls Fixed</div>
+        </div>
+        <div class="dq-cell">
+            <div class="dq-value">{rows_removed}</div>
+            <div class="dq-label">Rows Dropped</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # SUMMARY
     st.markdown('<div class="section-label">Executive Summary</div>',
@@ -402,46 +469,53 @@ def show_results(df, kpis, insights, show_raw, show_kpis):
         unsafe_allow_html=True
     )
 
-    # METRICS
+    # KEY METRICS
     st.markdown('<div class="section-label">Key Metrics</div>',
                 unsafe_allow_html=True)
+
+    top_r     = kpis.get("top_region", "N/A")
+    bot_r     = kpis.get("bottom_region", "N/A")
+    region_vs = kpis.get("region_vs_average", {})
+    top_delta = region_vs.get(top_r, 0)
+    bot_delta = region_vs.get(bot_r, 0)
+    top_sign  = "+" if top_delta >= 0 else ""
+    bot_sign  = "+" if bot_delta >= 0 else ""
+
     st.markdown(f"""
     <div class="metric-row">
         <div class="metric-cell">
             <div class="metric-cell-label">Total Revenue</div>
             <div class="metric-cell-value">${kpis.get('total_revenue', 0):,.0f}</div>
+            <div class="metric-delta delta-flat">{kpis.get('total_rows', 0):,} transactions</div>
         </div>
         <div class="metric-cell">
             <div class="metric-cell-label">Avg Transaction</div>
             <div class="metric-cell-value">${kpis.get('avg_transaction', 0):,.0f}</div>
+            <div class="metric-delta delta-flat">Median ${kpis.get('median_transaction', 0):,.0f}</div>
         </div>
         <div class="metric-cell">
-            <div class="metric-cell-label">Median Transaction</div>
-            <div class="metric-cell-value">${kpis.get('median_transaction', 0):,.0f}</div>
+            <div class="metric-cell-label">Best Region</div>
+            <div class="metric-cell-value">{top_r}</div>
+            <div class="metric-delta delta-up">{top_sign}{top_delta}% vs average</div>
         </div>
         <div class="metric-cell">
-            <div class="metric-cell-label">Total Records</div>
-            <div class="metric-cell-value">{kpis.get('total_rows', 0):,}</div>
+            <div class="metric-cell-label">Weakest Region</div>
+            <div class="metric-cell-value">{bot_r}</div>
+            <div class="metric-delta delta-down">{bot_sign}{bot_delta}% vs average</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ANALYSIS
+    # AI ANALYSIS
     st.markdown('<div class="section-label">Analysis</div>',
                 unsafe_allow_html=True)
 
-    ins_html  = "".join(
-        f'<div class="analysis-item">{x}</div>'
-        for x in insights.get("insights", [])
-    )
-    risk_html = "".join(
-        f'<div class="analysis-item">{x}</div>'
-        for x in insights.get("risks", [])
-    )
-    rec_html  = "".join(
-        f'<div class="analysis-item">{x}</div>'
-        for x in insights.get("recommendations", [])
-    )
+    ins_html  = "".join(f'<div class="analysis-item">{x}</div>'
+                        for x in insights.get("insights", []))
+    risk_html = "".join(f'<div class="analysis-item">{x}</div>'
+                        for x in insights.get("risks", []))
+    rec_html  = "".join(f'<div class="analysis-item">{x}</div>'
+                        for x in insights.get("recommendations", []))
 
     st.markdown(f"""
     <div class="analysis-grid">
@@ -460,20 +534,106 @@ def show_results(df, kpis, insights, show_raw, show_kpis):
     </div>
     """, unsafe_allow_html=True)
 
+    # PERFORMERS TABLE
+    st.markdown('<div class="section-label">Performance Table</div>',
+                unsafe_allow_html=True)
+
+    top_reps = kpis.get("top_reps", [])
+    bot_reps = kpis.get("bottom_reps", [])
+
+    col_top, col_bot = st.columns(2, gap="small")
+
+    with col_top:
+        header = """
+        <div style="background:#FFFFFF;border:1px solid #DDDDDD;
+                    border-radius:3px;padding:1.4rem 1.3rem;">
+            <div style="font-size:0.65rem;font-weight:600;letter-spacing:0.18em;
+                        text-transform:uppercase;color:#111111;margin-bottom:1rem;
+                        padding-bottom:0.55rem;border-bottom:2px solid #111111;">
+                Top Performers
+            </div>
+        """
+        st.markdown(header, unsafe_allow_html=True)
+        if top_reps:
+            for r in top_reps:
+                name    = r.get("name", "")
+                revenue = r.get("revenue", 0)
+                delta   = r.get("vs_average", "")
+                st.markdown(f"""
+                <div style="display:flex;justify-content:space-between;
+                            align-items:center;padding:0.55rem 0;
+                            border-bottom:1px solid #F0F0EB;font-size:0.85rem;">
+                    <span style="font-weight:500;color:#222222;">{name}</span>
+                    <div style="text-align:right;">
+                        <div style="font-family:'DM Serif Display',serif;
+                                    font-size:0.95rem;color:#111111;">
+                            ${revenue:,.0f}
+                        </div>
+                        <div style="font-size:0.72rem;font-weight:500;color:#1A7A1A;">
+                            {delta}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="font-size:0.85rem;color:#AAAAAA;">No data</p>',
+                        unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_bot:
+        header2 = """
+        <div style="background:#FFFFFF;border:1px solid #DDDDDD;
+                    border-radius:3px;padding:1.4rem 1.3rem;">
+            <div style="font-size:0.65rem;font-weight:600;letter-spacing:0.18em;
+                        text-transform:uppercase;color:#111111;margin-bottom:1rem;
+                        padding-bottom:0.55rem;border-bottom:2px solid #111111;">
+                Bottom Performers
+            </div>
+        """
+        st.markdown(header2, unsafe_allow_html=True)
+        if bot_reps:
+            for r in bot_reps:
+                name    = r.get("name", "")
+                revenue = r.get("revenue", 0)
+                delta   = r.get("vs_average", "")
+                st.markdown(f"""
+                <div style="display:flex;justify-content:space-between;
+                            align-items:center;padding:0.55rem 0;
+                            border-bottom:1px solid #F0F0EB;font-size:0.85rem;">
+                    <span style="font-weight:500;color:#222222;">{name}</span>
+                    <div style="text-align:right;">
+                        <div style="font-family:'DM Serif Display',serif;
+                                    font-size:0.95rem;color:#111111;">
+                            ${revenue:,.0f}
+                        </div>
+                        <div style="font-size:0.72rem;font-weight:500;color:#AA1A1A;">
+                            {delta}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown('<p style="font-size:0.85rem;color:#AAAAAA;">No data</p>',
+                        unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
     # CHARTS
     st.markdown('<div class="section-label">Visual Analytics</div>',
                 unsafe_allow_html=True)
 
+    # Row 1
     col_a, col_b = st.columns(2, gap="small")
 
     with col_a:
         if "revenue_by_region" in kpis:
             regions = list(kpis["revenue_by_region"].keys())
             values  = list(kpis["revenue_by_region"].values())
+            colors  = ["#111111" if r == top_r else "#CCCCCC" for r in regions]
             fig = go.Figure(go.Bar(
-                x=regions,
-                y=values,
-                marker_color="#111111",
+                x=regions, y=values,
+                marker_color=colors,
                 marker_line_width=0,
                 text=[f"${v:,.0f}" for v in values],
                 textposition="outside",
@@ -510,8 +670,7 @@ def show_results(df, kpis, insights, show_raw, show_kpis):
             fig2.update_layout(
                 **clean_layout("Revenue by Product"),
                 annotations=[dict(
-                    text="Revenue",
-                    x=0.5, y=0.5,
+                    text="Revenue", x=0.5, y=0.5,
                     font=dict(size=11, color="#AAAAAA",
                               family="DM Sans, sans-serif"),
                     showarrow=False
@@ -521,59 +680,204 @@ def show_results(df, kpis, insights, show_raw, show_kpis):
             st.plotly_chart(fig2, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-    if "monthly_trend" in kpis:
-        months = list(kpis["monthly_trend"].keys())
-        vals   = list(kpis["monthly_trend"].values())
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(
-            x=months, y=vals,
-            mode="lines+markers",
-            line=dict(color="#111111", width=2, shape="spline"),
-            marker=dict(size=5, color="#111111",
-                        line=dict(color="#FFFFFF", width=1.5)),
-            fill="tozeroy",
-            fillcolor="rgba(17,17,17,0.04)",
-            hovertemplate="<b>%{x}</b><br>$%{y:,.0f}<extra></extra>"
-        ))
-        fig3.update_layout(
-            **clean_layout("Monthly Revenue Trend"),
-            xaxis=dict(showgrid=False, showline=False,
-                       tickangle=-30,
-                       tickfont=dict(color="#CCCCCC", size=10)),
-            yaxis=dict(showgrid=True, gridcolor="#F0F0EB",
-                       showline=False, zeroline=False,
-                       tickfont=dict(color="#CCCCCC"),
-                       tickprefix="$", tickformat=",.0f"),
-            showlegend=False
-        )
-        st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-        st.plotly_chart(fig3, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Row 2
+    col_c, col_d = st.columns(2, gap="small")
 
-    if "revenue_by_customer_type" in kpis:
-        ct_labels = list(kpis["revenue_by_customer_type"].keys())
-        ct_vals   = list(kpis["revenue_by_customer_type"].values())
-        fig4 = go.Figure(go.Bar(
-            x=ct_vals, y=ct_labels,
-            orientation="h",
-            marker_color=["#111111","#888888"],
-            marker_line_width=0,
-            text=[f"${v:,.0f}" for v in ct_vals],
-            textposition="outside",
-            textfont=dict(size=10, color="#AAAAAA",
-                          family="DM Sans, sans-serif")
+    with col_c:
+        if "monthly_trend" in kpis:
+            months = list(kpis["monthly_trend"].keys())
+            vals   = list(kpis["monthly_trend"].values())
+            fig3   = go.Figure()
+            fig3.add_trace(go.Scatter(
+                x=months, y=vals,
+                mode="lines+markers",
+                line=dict(color="#111111", width=2, shape="spline"),
+                marker=dict(size=5, color="#111111",
+                            line=dict(color="#FFFFFF", width=1.5)),
+                fill="tozeroy",
+                fillcolor="rgba(17,17,17,0.04)",
+                hovertemplate="<b>%{x}</b><br>$%{y:,.0f}<extra></extra>"
+            ))
+            fig3.update_layout(
+                **clean_layout("Monthly Revenue Trend"),
+                xaxis=dict(showgrid=False, showline=False,
+                           tickangle=-30,
+                           tickfont=dict(color="#CCCCCC", size=10)),
+                yaxis=dict(showgrid=True, gridcolor="#F0F0EB",
+                           showline=False, zeroline=False,
+                           tickfont=dict(color="#CCCCCC"),
+                           tickprefix="$", tickformat=",.0f"),
+                showlegend=False
+            )
+            st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
+            st.plotly_chart(fig3, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_d:
+        if "mom_growth_rates" in kpis:
+            mom_months = list(kpis["mom_growth_rates"].keys())
+            mom_vals   = list(kpis["mom_growth_rates"].values())
+            bar_colors = ["#111111" if v >= 0 else "#BBBBBB" for v in mom_vals]
+            fig4 = go.Figure(go.Bar(
+                x=mom_months, y=mom_vals,
+                marker_color=bar_colors,
+                marker_line_width=0,
+                text=[f"{v:+.1f}%" for v in mom_vals],
+                textposition="outside",
+                textfont=dict(size=9, color="#AAAAAA",
+                              family="DM Sans, sans-serif")
+            ))
+            fig4.add_hline(y=0, line_color="#DDDDDD", line_width=1)
+            fig4.update_layout(
+                **clean_layout("Month over Month Growth Rate"),
+                xaxis=dict(showgrid=False, showline=False,
+                           tickangle=-30,
+                           tickfont=dict(color="#CCCCCC", size=9)),
+                yaxis=dict(showgrid=True, gridcolor="#F0F0EB",
+                           showline=False, zeroline=False,
+                           tickfont=dict(color="#CCCCCC"),
+                           ticksuffix="%")
+            )
+            st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
+            st.plotly_chart(fig4, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # Row 3
+    col_e, col_f = st.columns(2, gap="small")
+
+    with col_e:
+        if "revenue_by_customer_type" in kpis:
+            ct_labels = list(kpis["revenue_by_customer_type"].keys())
+            ct_vals   = list(kpis["revenue_by_customer_type"].values())
+            ct_pct    = kpis.get("customer_type_pct", {})
+            fig5 = go.Figure(go.Bar(
+                x=ct_vals, y=ct_labels,
+                orientation="h",
+                marker_color=["#111111","#888888"],
+                marker_line_width=0,
+                text=[f"${v:,.0f}  ({ct_pct.get(k, 0)}%)"
+                      for k, v in zip(ct_labels, ct_vals)],
+                textposition="outside",
+                textfont=dict(size=10, color="#AAAAAA",
+                              family="DM Sans, sans-serif")
+            ))
+            fig5.update_layout(
+                **clean_layout("New vs Repeat Customers"),
+                xaxis=dict(showgrid=True, gridcolor="#F0F0EB",
+                           showline=False, zeroline=False,
+                           tickfont=dict(color="#CCCCCC"),
+                           tickprefix="$", tickformat=",.0f"),
+                yaxis=dict(showgrid=False, showline=False,
+                           tickfont=dict(color="#444444", size=12))
+            )
+            st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
+            st.plotly_chart(fig5, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_f:
+        if "Sales_Rep" in df.columns:
+            rev_col   = kpis.get("revenue_column", "Revenue")
+            units_col = next(
+                (c for c in df.columns if "unit" in c.lower()), None
+            )
+            if units_col:
+                rep_data = df.groupby("Sales_Rep").agg(
+                    revenue=(rev_col, "sum"),
+                    units=(units_col, "sum")
+                ).reset_index()
+                avg_rev        = rep_data["revenue"].mean()
+                colors_scatter = [
+                    "#111111" if r >= avg_rev else "#CCCCCC"
+                    for r in rep_data["revenue"]
+                ]
+                fig6 = go.Figure(go.Scatter(
+                    x=rep_data["units"],
+                    y=rep_data["revenue"],
+                    mode="markers+text",
+                    marker=dict(size=10, color=colors_scatter,
+                                line=dict(color="#FFFFFF", width=1.5)),
+                    text=rep_data["Sales_Rep"],
+                    textposition="top center",
+                    textfont=dict(size=9, color="#888888",
+                                  family="DM Sans, sans-serif"),
+                    hovertemplate=(
+                        "<b>%{text}</b><br>"
+                        "Units: %{x}<br>"
+                        "Revenue: $%{y:,.0f}<extra></extra>"
+                    )
+                ))
+                fig6.add_hline(
+                    y=avg_rev,
+                    line_dash="dot",
+                    line_color="#DDDDDD",
+                    line_width=1,
+                    annotation_text="avg",
+                    annotation_font_color="#BBBBBB",
+                    annotation_font_size=10
+                )
+                fig6.update_layout(
+                    **clean_layout("Sales Rep Performance"),
+                    xaxis=dict(showgrid=True, gridcolor="#F0F0EB",
+                               showline=False, zeroline=False,
+                               title=dict(text="Units Sold",
+                                          font=dict(color="#AAAAAA", size=11)),
+                               tickfont=dict(color="#CCCCCC")),
+                    yaxis=dict(showgrid=True, gridcolor="#F0F0EB",
+                               showline=False, zeroline=False,
+                               title=dict(text="Revenue",
+                                          font=dict(color="#AAAAAA", size=11)),
+                               tickfont=dict(color="#CCCCCC"),
+                               tickprefix="$", tickformat=",.0f"),
+                    showlegend=False
+                )
+                st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
+                st.plotly_chart(fig6, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    # Row 4 — Heatmap full width
+    if "Region" in df.columns and "Product" in df.columns:
+        rev_col      = kpis.get("revenue_column", "Revenue")
+        heatmap_data = df.groupby(
+            ["Region", "Product"]
+        )[rev_col].sum().reset_index()
+        heatmap_pivot = heatmap_data.pivot(
+            index="Region", columns="Product", values=rev_col
+        ).fillna(0)
+
+        fig7 = go.Figure(go.Heatmap(
+            z=heatmap_pivot.values,
+            x=list(heatmap_pivot.columns),
+            y=list(heatmap_pivot.index),
+            colorscale=[
+                [0.0, "#F5F5F0"],
+                [0.3, "#CCCCCC"],
+                [0.6, "#666666"],
+                [1.0, "#111111"]
+            ],
+            showscale=True,
+            colorbar=dict(
+                thickness=10,
+                tickfont=dict(color="#AAAAAA", size=10,
+                              family="DM Sans, sans-serif"),
+                tickprefix="$", tickformat=",.0f"
+            ),
+            text=[[f"${v:,.0f}" for v in row]
+                  for row in heatmap_pivot.values],
+            texttemplate="%{text}",
+            textfont=dict(size=10, color="#111111",
+                          family="DM Sans, sans-serif"),
+            hovertemplate=(
+                "<b>%{y} — %{x}</b><br>"
+                "$%{z:,.0f}<extra></extra>"
+            )
         ))
-        fig4.update_layout(
-            **clean_layout("New vs Repeat Customers"),
-            xaxis=dict(showgrid=True, gridcolor="#F0F0EB",
-                       showline=False, zeroline=False,
-                       tickfont=dict(color="#CCCCCC"),
-                       tickprefix="$", tickformat=",.0f"),
-            yaxis=dict(showgrid=False, showline=False,
-                       tickfont=dict(color="#444444", size=12))
+        fig7.update_layout(
+            **clean_layout("Region vs Product Revenue Heatmap"),
+            xaxis=dict(tickfont=dict(color="#444444", size=11), side="bottom"),
+            yaxis=dict(tickfont=dict(color="#444444", size=11))
         )
         st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-        st.plotly_chart(fig4, use_container_width=True)
+        st.plotly_chart(fig7, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # EXPORT
@@ -645,7 +949,10 @@ if uploaded_file:
                 st.write("Generating AI insights...")
                 insights = run_analysis(kpis, report)
                 st.session_state["result"] = {
-                    "df": clean_df, "kpis": kpis, "insights": insights
+                    "df":           clean_df,
+                    "kpis":         kpis,
+                    "insights":     insights,
+                    "clean_report": report
                 }
                 status.update(label="Analysis complete.", state="complete")
 
@@ -655,8 +962,12 @@ if uploaded_file:
             st.error(f"Error: {res['insights']['error']}")
         else:
             show_results(
-                res["df"], res["kpis"], res["insights"],
-                show_raw, show_kpis
+                res["df"],
+                res["kpis"],
+                res["insights"],
+                res["clean_report"],
+                show_raw,
+                show_kpis
             )
 
 else:
@@ -669,12 +980,11 @@ else:
             Use <em>data/sample_sales.csv</em> to run a demo.
         </p>
     </div>
-
     <div class="feature-row">
         <div class="feature-cell">
             <div class="feature-cell-title">Data Cleaning</div>
             <div class="feature-cell-desc">
-                Duplicate rows removed. Missing values filled with column median.
+                Duplicate rows removed. Missing values filled with median.
                 Date columns parsed automatically.
             </div>
         </div>
@@ -682,18 +992,17 @@ else:
             <div class="feature-cell-title">KPI Engine</div>
             <div class="feature-cell-desc">
                 Revenue by region, monthly trend, product breakdown
-                and customer type split — computed via pandas and SQL.
+                and rep performance — computed via pandas and SQL.
             </div>
         </div>
         <div class="feature-cell">
             <div class="feature-cell-title">AI Analysis</div>
             <div class="feature-cell-desc">
                 Claude AI returns an executive summary, key insights,
-                business risks and action recommendations.
+                business risks and action recommendations with dollar impact.
             </div>
         </div>
     </div>
-
     <div class="page-footer">
         <div class="page-footer-left">
             AI Business Analyst Agent &mdash;
